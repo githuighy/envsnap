@@ -1,42 +1,55 @@
 package snapshot
 
-// ChangeKind describes the type of change between two snapshots.
-type ChangeKind string
-
+// Status constants for diff entries.
 const (
-	Added   ChangeKind = "added"
-	Removed ChangeKind = "removed"
-	Changed ChangeKind = "changed"
+	StatusAdded   = "added"
+	StatusRemoved = "removed"
+	StatusChanged = "changed"
 )
 
-// Change represents a single variable difference between two snapshots.
-type Change struct {
-	Key      string     `json:"key"`
-	Kind     ChangeKind `json:"kind"`
-	OldValue string     `json:"old_value,omitempty"`
-	NewValue string     `json:"new_value,omitempty"`
+// DiffEntry represents a single changed environment variable.
+type DiffEntry struct {
+	Key      string
+	Status   string
+	OldValue string
+	NewValue string
 }
 
-// Diff computes the differences between a base snapshot and a target snapshot.
-// Variables present only in target are Added; only in base are Removed;
-// present in both with different values are Changed.
-func Diff(base, target *Snapshot) []Change {
-	var changes []Change
+// Diff compares two snapshots and returns a list of differences.
+func Diff(before, after Snapshot) []DiffEntry {
+	var entries []DiffEntry
 
-	for k, newVal := range target.Vars {
-		oldVal, exists := base.Vars[k]
+	// Check for removed or changed keys.
+	for k, oldVal := range before.Vars {
+		newVal, exists := after.Vars[k]
 		if !exists {
-			changes = append(changes, Change{Key: k, Kind: Added, NewValue: newVal})
+			entries = append(entries, DiffEntry{
+				Key:      k,
+				Status:   StatusRemoved,
+				OldValue: oldVal,
+				NewValue: "",
+			})
 		} else if oldVal != newVal {
-			changes = append(changes, Change{Key: k, Kind: Changed, OldValue: oldVal, NewValue: newVal})
+			entries = append(entries, DiffEntry{
+				Key:      k,
+				Status:   StatusChanged,
+				OldValue: oldVal,
+				NewValue: newVal,
+			})
 		}
 	}
 
-	for k, oldVal := range base.Vars {
-		if _, exists := target.Vars[k]; !exists {
-			changes = append(changes, Change{Key: k, Kind: Removed, OldValue: oldVal})
+	// Check for added keys.
+	for k, newVal := range after.Vars {
+		if _, exists := before.Vars[k]; !exists {
+			entries = append(entries, DiffEntry{
+				Key:      k,
+				Status:   StatusAdded,
+				OldValue: "",
+				NewValue: newVal,
+			})
 		}
 	}
 
-	return changes
+	return entries
 }
