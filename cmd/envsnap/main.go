@@ -1,30 +1,17 @@
-// envsnap is a CLI tool for snapshotting and diffing environment variables
-// across deployments. It supports capturing the current environment, saving
-// snapshots to disk, and comparing two snapshots to detect changes.
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/user/envsnap/internal/snapshot"
 )
 
-const usage = `envsnap - snapshot and diff environment variables
-
-Usage:
-  envsnap capture <output-file>   Capture current env vars and save to file
-  envsnap diff <file-a> <file-b>  Diff two snapshot files
-  envsnap help                    Show this help message
-
-Examples:
-  envsnap capture ./snapshots/prod.json
-  envsnap diff ./snapshots/staging.json ./snapshots/prod.json
-`
-
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Fprintln(os.Stderr, "usage: envsnap <capture|diff|merge> [options]")
 		os.Exit(1)
 	}
 
@@ -33,73 +20,94 @@ func main() {
 		runCapture(os.Args[2:])
 	case "diff":
 		runDiff(os.Args[2:])
-	case "help", "--help", "-h":
-		fmt.Print(usage)
+	case "merge":
+		runMerge(os.Args[2:])
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", os.Args[1])
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
 	}
 }
 
-// runCapture handles the "capture" subcommand. It takes a single argument
-// specifying the output file path where the snapshot will be saved as JSON.
 func runCapture(args []string) {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: envsnap capture <output-file>")
-		os.Exit(1)
-	}
-
-	outputPath := args[0]
+	fs := flag.NewFlagSet("capture", flag.ExitOnError)
+	out := fs.String("out", "snapshot.json", "output file")
+	_ = fs.Parse(args)
 
 	snap := snapshot.Capture()
-	if err := snapshot.Save(snap, outputPath); err != nil {
+	if err := snapshot.Save(snap, *out); err != nil {
 		fmt.Fprintf(os.Stderr, "error saving snapshot: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("snapshot saved to %s (%d variables)\n", outputPath, len(snap))
+	fmt.Printf("snapshot saved to %s (%d vars)\n", *out, len(snap))
 }
 
-// runDiff handles the "diff" subcommand. It loads two snapshot files and
-// prints a human-readable summary of added, removed, and changed variables.
 func runDiff(args []string) {
-	if len(args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: envsnap diff <file-a> <file-b>")
+	fs := flag.NewFlagSet("diff", flag.ExitOnError)
+	format := fs.String("format", "text", "output format: text|json|env")
+	_ = fs.Parse(args)
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "usage: envsnap diff <base> <override>")
 		os.Exit(1)
 	}
 
-	fileA, fileB := args[0], args[1]
-
-	snapA, err := snapshot.Load(fileA)
+	base, err := snapshot.Load(fs.Arg(0))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading %s: %v\n", fileA, err)
+		fmt.Fprintf(os.Stderr, "error loading base: %v\n", err)
 		os.Exit(1)
 	}
-
-	snapB, err := snapshot.Load(fileB)
+	over, err := snapshot.Load(fs.Arg(1))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading %s: %v\n", fileB, err)
+		fmt.Fprintf(os.Stderr, "error loading override: %v\n", err)
 		os.Exit(1)
 	}
 
-	result := snapshot.Diff(snapA, snapB)
+	diffs := snapshot.Diff(base, over)
+	out, err := snapshot.RenderDiff(diffs, *format)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "render error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(out)
+}
 
-	if len(result.Added) == 0 && len(result.Removed) == 0 && len(result.Changed) == 0 {
-		fmt.Println("no differences found")
+func runMerge(args []string) {
+	fs := flag.NewFlagSet("merge", flag.ExitOnError)
+	prefer := fs.String("prefer", "override", "conflict resolution: base|override")
+	out := fs.String("out", "", "write merged snapshot to file (prints JSON if omitted)")
+	_ = fs.Parse(args)
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "usage: envsnap merge <base> <override> [options]")
+		os.Exit(1)
+	}
+
+	base, err := snapshot.Load(fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading base: %v\n", err)
+		os.Exit(1)
+	}
+	over, err := snapshot.Load(fs.Arg(1))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading override: %v\n", err)
+		os.Exit(1)
+	}
+
+	merged := snapshot.Merge(base, over, snapshot.MergeOptions{Prefer: *prefer})
+
+	if *out != "" {
+		if err := snapshot.Save(merged, *out); err != nil {
+			fmt.Fprintf(os.Stderr, "error saving merged snapshot: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("merged snapshot saved to %s (%d vars)\n", *out, len(merged))
 		return
 	}
 
-	for _, key := range result.Added {
-		fmt.Printf("+ %s=%s\n", key, snapB[key])
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(merged); err != nil {
+		fmt.Fprintf(os.Stderr, "error encoding output: %v\n", err)
+		os.Exit(1)
 	}
-	for _, key := range result.Removed {
-		fmt.Printf("- %s=%s\n", key, snapA[key])
-	}
-	for _, key := range result.Changed {
-		fmt.Printf("~ %s: %q -> %q\n", key, snapA[key], snapB[key])
-	}
-
-	fmt.Printf("\nsummary: %d added, %d removed, %d changed\n",
-		len(result.Added), len(result.Removed), len(result.Changed))
 }
