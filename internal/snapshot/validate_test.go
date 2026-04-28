@@ -71,6 +71,14 @@ func TestValidate_MaxKeyLength(t *testing.T) {
 	}
 }
 
+func TestValidate_MaxKeyLength_AllWithinLimit(t *testing.T) {
+	snap := Snapshot{"SHORT": "ok", "MEDIUM_KEY": "val"}
+	err := Validate(snap, ValidateOptions{MaxKeyLength: 10})
+	if err != nil {
+		t.Fatalf("expected no error when all keys are within max length, got: %v", err)
+	}
+}
+
 func TestValidate_MultipleIssues(t *testing.T) {
 	snap := Snapshot{"FORBIDDEN": "x"}
 	err := Validate(snap, ValidateOptions{
