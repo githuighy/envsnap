@@ -9,6 +9,7 @@ import (
 )
 
 // runLint loads a snapshot file and runs lint checks against it.
+// Exits with code 2 if any lint issues are found.
 func runLint(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: envsnap lint <snapshot-file> [--format text|json] [--no-lowercase] [--no-empty] [--no-whitespace]")
@@ -25,6 +26,9 @@ func runLint(args []string) {
 			if i+1 < len(args) {
 				i++
 				format = args[i]
+			} else {
+				fmt.Fprintln(os.Stderr, "error: --format requires an argument (text or json)")
+				os.Exit(1)
 			}
 		case "--no-lowercase":
 			opts.WarnLowercase = false
@@ -46,8 +50,11 @@ func runLint(args []string) {
 	switch format {
 	case "json":
 		printLintJSON(issues)
-	default:
+	case "text":
 		printLintText(issues)
+	default:
+		fmt.Fprintf(os.Stderr, "error: unknown format %q, expected text or json\n", format)
+		os.Exit(1)
 	}
 
 	if len(issues) > 0 {
