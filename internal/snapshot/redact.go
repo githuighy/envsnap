@@ -49,6 +49,22 @@ func Redact(snap map[string]string, opts RedactOptions) map[string]string {
 	return result
 }
 
+// RedactedKeys returns the list of keys from snap that would be considered
+// sensitive and redacted using the given options. This is useful for auditing
+// which variables will be masked before performing a full redaction.
+func RedactedKeys(snap map[string]string, opts RedactOptions) []string {
+	if len(opts.SensitiveKeys) == 0 {
+		opts.SensitiveKeys = DefaultSensitiveKeys
+	}
+	var keys []string
+	for k := range snap {
+		if isSensitive(k, opts.SensitiveKeys) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
 // isSensitive reports whether the key contains any of the given substrings,
 // using a case-insensitive comparison.
 func isSensitive(key string, sensitiveKeys []string) bool {
