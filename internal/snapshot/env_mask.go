@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -46,6 +47,7 @@ func MaskedKeys(snap Snapshot, opts MaskOptions) []string {
 			keys = append(keys, k)
 		}
 	}
+	sort.Strings(keys)
 	return keys
 }
 
