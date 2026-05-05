@@ -12,8 +12,8 @@ import (
 type ExportFormat string
 
 const (
-	ExportFormatEnv  ExportFormat = "env"
-	ExportFormatJSON ExportFormat = "json"
+	ExportFormatEnv   ExportFormat = "env"
+	ExportFormatJSON  ExportFormat = "json"
 	ExportFormatShell ExportFormat = "shell"
 )
 
@@ -51,7 +51,10 @@ func Export(snap Snapshot, opts ExportOptions) error {
 	if err := os.MkdirAll(filepath.Dir(opts.OutFile), 0o755); err != nil {
 		return fmt.Errorf("export: mkdir: %w", err)
 	}
-	return os.WriteFile(opts.OutFile, []byte(content), 0o644)
+	if err := os.WriteFile(opts.OutFile, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("export: write file %q: %w", opts.OutFile, err)
+	}
+	return nil
 }
 
 func exportEnv(snap Snapshot) string {
