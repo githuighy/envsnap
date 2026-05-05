@@ -6,12 +6,12 @@ import (
 
 func baseSnap() Snapshot {
 	return Snapshot{
-		"APP_ENV":      "production",
-		"APP_PORT":     "8080",
-		"DB_HOST":      "localhost",
-		"DB_PASSWORD":  "secret",
-		"HOME":         "/root",
-		"PATH":         "/usr/bin",
+		"APP_ENV":     "production",
+		"APP_PORT":    "8080",
+		"DB_HOST":     "localhost",
+		"DB_PASSWORD": "secret",
+		"HOME":        "/root",
+		"PATH":        "/usr/bin",
 	}
 }
 
@@ -73,5 +73,17 @@ func TestFilter_EmptySnapshot(t *testing.T) {
 	got := Filter(Snapshot{}, FilterOptions{Prefixes: []string{"APP_"}})
 	if len(got) != 0 {
 		t.Fatalf("expected empty result, got %d entries", len(got))
+	}
+}
+
+func TestFilter_ExcludeExactKey(t *testing.T) {
+	snap := baseSnap()
+	got := Filter(snap, FilterOptions{Exclude: []string{"HOME"}})
+
+	if _, ok := got["HOME"]; ok {
+		t.Error("HOME should have been excluded")
+	}
+	if len(got) != len(snap)-1 {
+		t.Fatalf("expected %d entries, got %d", len(snap)-1, len(got))
 	}
 }
