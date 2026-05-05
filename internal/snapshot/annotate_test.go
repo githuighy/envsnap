@@ -52,6 +52,20 @@ func TestAnnotate_InvalidKeyCharacters(t *testing.T) {
 	}
 }
 
+func TestAnnotate_DoesNotMutateOriginalSnapshot(t *testing.T) {
+	snap := baseAnnotateSnap()
+	originalLen := len(snap)
+
+	_, err := Annotate(snap, []Annotation{{Key: "author", Value: "alice"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(snap) != originalLen {
+		t.Errorf("Annotate mutated the original snapshot: expected %d keys, got %d", originalLen, len(snap))
+	}
+}
+
 func TestGetAnnotations_ReturnsAll(t *testing.T) {
 	snap := baseAnnotateSnap()
 	snap[annotationPrefix+"env"] = "staging"
