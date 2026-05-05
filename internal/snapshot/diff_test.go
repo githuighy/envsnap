@@ -59,3 +59,22 @@ func TestDiff_NoChanges(t *testing.T) {
 		t.Errorf("expected no changes, got %d", len(changes))
 	}
 }
+
+func TestDiff_MultipleChanges(t *testing.T) {
+	base := makeSnap(map[string]string{"A": "1", "B": "old", "C": "3"})
+	target := makeSnap(map[string]string{"A": "1", "B": "new", "D": "4"})
+
+	changes := Diff(base, target)
+	// Expect: B changed, C removed, D added
+	if len(changes) != 3 {
+		t.Fatalf("expected 3 changes, got %d", len(changes))
+	}
+
+	kinds := map[ChangeKind]int{}
+	for _, c := range changes {
+		kinds[c.Kind]++
+	}
+	if kinds[Added] != 1 || kinds[Removed] != 1 || kinds[Changed] != 1 {
+		t.Errorf("unexpected change kinds: %v", kinds)
+	}
+}
